@@ -43,7 +43,7 @@ jobs:
             echo "=========================================================="
 
             DEPLOY_PATH="deploy-test-student"
-            IMAGE_NAME="ghcr.io/popy36473/student-backend:latest"
+            IMAGE_NAME="ghcr.io/popy36473/student-backend"
 
             # 1. Clone repository neu chua ton tai
             if [ ! -d "$DEPLOY_PATH" ]; then
