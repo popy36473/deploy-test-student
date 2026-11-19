@@ -87,7 +87,7 @@ jobs:
 
             # 7. Khoi dong ung dung
             echo "[6/7] Khoi dong Docker Compose..."
-            docker compose pull product-backend-service
+            docker compose pull student-backend-service
             docker compose up -d --remove-orphans
 
             # Kiem tra ket qua
