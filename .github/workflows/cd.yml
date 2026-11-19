@@ -1,0 +1,100 @@
+
+name: CD - Continuous Deployment
+
+on:
+  # Tu dong chay khi CI hoan thanh
+  workflow_run:
+    workflows: ["CI - Continuous Integration"]
+    types:
+      - completed
+    branches: ["main", "master"]
+
+  # Cho phep deploy thu cong
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    # Chi deploy khi CI thanh cong hoac chay thu cong
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Deploy application to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Thong tin ket noi VPS
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+
+          # Truyen commit SHA tu workflow CI
+          envs: IMAGE_TAG
+
+          script: |
+            set -e
+
+            echo "=========================================================="
+            echo ">>> BAT DAU QUA TRINH DEPLOY TREN VPS"
+            echo "=========================================================="
+
+            DEPLOY_PATH="deploy-test-student"
+            IMAGE_NAME="ghcr.io/popy36473/student-backend:latest"
+
+            # 1. Clone repository neu chua ton tai
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "[1/7] Clone repository..."
+              git clone https://github.com/popy36473/deploy-test-student.git "$DEPLOY_PATH"
+            fi
+
+            cd "$DEPLOY_PATH"
+
+            # 2. Cap nhat source code
+            echo "[2/7] Cap nhat source code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 3. Dang nhap GHCR
+            echo "[3/7] Dang nhap GitHub Container Registry..."
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
+              -u popy36473 --password-stdin
+
+            # 4. Xac dinh tag image
+            # Neu khong co SHA (deploy thu cong) thi dung latest
+            if [ -z "$IMAGE_TAG" ]; then
+              IMAGE_TAG="latest"
+            fi
+
+            echo "Image tag: $IMAGE_TAG"
+
+            # 5. Pull image tu GHCR
+            echo "[4/7] Pull Docker Image..."
+            docker pull "$IMAGE_NAME:$IMAGE_TAG"
+
+            # 6. Cap nhat IMAGE_TAG trong file .env
+            echo "[5/7] Cap nhat IMAGE_TAG..."
+            touch .env
+
+            if grep -q '^IMAGE_TAG=' .env; then
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" .env
+            else
+              echo "IMAGE_TAG=$IMAGE_TAG" >> .env
+            fi
+
+            # 7. Khoi dong ung dung
+            echo "[6/7] Khoi dong Docker Compose..."
+            docker compose pull product-backend-service
+            docker compose up -d --remove-orphans
+
+            # Kiem tra ket qua
+            echo "[7/7] Kiem tra trang thai..."
+            docker images "$IMAGE_NAME"
+            docker compose ps
+
+            echo "=========================================================="
+            echo ">>> DEPLOY HOAN TAT!"
+            echo "=========================================================="
